@@ -280,8 +280,12 @@ class crxb_Linear(nn.Linear):
 
     def __init__(self, in_features, out_features, ir_drop, device, gmax, gmin, gwire, gload, freq=10e6,
                  vdd=3.3, scaler_dw=1, temp=300, bias=True, crxb_size=64, quantize=8, enable_ec_SAF=False,
-                 enable_noise=True, enable_SAF=False):
+                 enable_noise=True, enable_SAF=False, clone_layer: nn.Linear | None = None):
         super(crxb_Linear, self).__init__(in_features, out_features, bias)
+        if clone_layer is not None:
+            self.weight.data = clone_layer.weight.data.clone()
+            if clone_layer.bias is not None:
+                self.bias.data = clone_layer.bias.data.clone()
 
         self.ir_drop = ir_drop
         self.device = device
@@ -290,7 +294,7 @@ class crxb_Linear(nn.Linear):
         self.enable_ec_SAF = enable_ec_SAF
 
         self.out_index = nn.Parameter(
-            torch.arange(out_features), requires_grad=False)
+            torch.arange(out_features), requires_grad=False).to(self.device)
         self.crxb_row, self.crxb_row_pads = self.num_pad(
             self.weight.shape[1], self.crxb_size)
         self.crxb_col, self.crxb_col_pads = self.num_pad(
@@ -311,16 +315,16 @@ class crxb_Linear(nn.Linear):
         self.Gmin = gmin  # min conductance
         self.delta_g = (self.Gmax - self.Gmin) / (2 ** 7)  # conductance step
         self.w2g = w2g(self.delta_g, Gmin=self.Gmin, G_SA0=self.Gmax,
-                       G_SA1=self.Gmin, weight_shape=weight_crxb.shape, enable_SAF=enable_SAF)
+                       G_SA1=self.Gmin, weight_shape=weight_crxb.shape, enable_SAF=enable_SAF).to(self.device)
         self.Gwire = gwire
         self.Gload = gload
         # DAC
         self.scaler_dw = scaler_dw
         self.Vdd = vdd  # unit: volt
         self.delta_v = self.Vdd / (self.n_lvl - 1)
-        self.delta_in_sum = nn.Parameter(torch.Tensor(1), requires_grad=False)
-        self.delta_out_sum = nn.Parameter(torch.Tensor(1), requires_grad=False)
-        self.counter = nn.Parameter(torch.Tensor(1), requires_grad=False)
+        self.delta_in_sum = nn.Parameter(torch.Tensor(1), requires_grad=False).to(self.device)
+        self.delta_out_sum = nn.Parameter(torch.Tensor(1), requires_grad=False).to(self.device)
+        self.counter = nn.Parameter(torch.Tensor(1), requires_grad=False).to(self.device)
 
         ################ Stochastic Conductance Noise setup #########################
         # parameters setup
@@ -361,9 +365,9 @@ class crxb_Linear(nn.Linear):
         # 2.1. skip the input unfold and weight flatten for fully-connected layers
         # 2.2. add padding
         weight_padded = F.pad(weight_quan, self.w_pad,
-                              mode='constant', value=0)
+                              mode='constant', value=0).to(self.device)
         input_padded = F.pad(input_quan, self.input_pad,
-                             mode='constant', value=0)
+                             mode='constant', value=0).to(self.device)
         # 2.3. reshape
         input_crxb = input_padded.view(
             input.shape[0], 1, self.crxb_row, self.crxb_size, 1)
