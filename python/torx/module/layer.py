@@ -280,12 +280,10 @@ class crxb_Linear(nn.Linear):
 
     def __init__(self, in_features, out_features, ir_drop, device, gmax, gmin, gwire, gload, freq=10e6,
                  vdd=3.3, scaler_dw=1, temp=300, bias=True, crxb_size=64, quantize=8, enable_ec_SAF=False,
-                 enable_noise=True, enable_SAF=False, clone_layer: nn.Linear | None = None):
+                 enable_noise=True, enable_SAF=False, params: torch.Tensor | None = None):
         super(crxb_Linear, self).__init__(in_features, out_features, bias)
-        if clone_layer is not None:
-            self.weight.data = clone_layer.weight.data.clone()
-            if clone_layer.bias is not None:
-                self.bias.data = clone_layer.bias.data.clone()
+        if params is not None:
+            self.weight.data = params
 
         self.ir_drop = ir_drop
         self.device = device
